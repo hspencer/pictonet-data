@@ -1,89 +1,71 @@
-# src/pictonet_data/collectors/arasaac.py
-import json
 import requests
-from typing import List, Dict, Optional
+import json
+from pathlib import Path
+from typing import List, Dict
 from .base import BaseDataCollector
 
 class ArasaacCollector(BaseDataCollector):
     def __init__(self, output_dir: str = "datasets/arasaac"):
         super().__init__(output_dir)
-        self.base_url = "https://api.arasaac.org/api/v1"
-        self.locales = ['es', 'en', 'fr']
+        self.base_url = "https://api.arasaac.org/api"
     
-    def get_keywords(self, locale: str = 'en') -> List[str]:
-        """Obtiene lista de keywords disponibles"""
-        url = f"{self.base_url}/pictograms/{locale}/all"
+    def search_pictograms(self, keyword: str, locale: str = 'en') -> List[Dict]:
+        """Buscar pictogramas por palabra clave"""
+        url = f"{self.base_url}/pictograms/{locale}/search/{keyword}"
+        
         try:
+            print(f"Buscando pictogramas para '{keyword}'...")
             response = requests.get(url)
             response.raise_for_status()
-            return [item['keyword'] for item in response.json()]
+            results = response.json()
+            print(f"Encontrados {len(results)} pictogramas")
+            
+            # Mostrar algunos detalles de los primeros resultados
+            for i, result in enumerate(results[:3]):
+                print(f"Pictograma {i+1}: ID={result['_id']}, Tags={result.get('tags', [])}")
+            
+            return results
+            
         except Exception as e:
-            self.logger.error(f"Error obteniendo keywords: {str(e)}")
+            print(f"Error en la búsqueda: {str(e)}")
             return []
-    
-    def download_pictogram(self, pictogram_id: int, locales: Optional[List[str]] = None) -> Dict:
-        """Descarga un pictograma específico y su metadata en varios idiomas"""
-        locales = locales or self.locales
-        pictogram_data = {'id': pictogram_id, 'translations': {}}
-        
+
+    def download_pictogram(self, pictogram_id: int) -> Dict:
+        """Descargar un pictograma específico"""
         try:
-            # Descargar SVG
-            svg_url = f"{self.base_url}/pictograms/{pictogram_id}"
-            svg_response = requests.get(svg_url)
+            # URL para imagen
+            png_url = f"https://static.arasaac.org/pictograms/{pictogram_id}/{pictogram_id}_500.png"
+            print(f"Descargando imagen desde: {png_url}")
             
-            if svg_response.status_code == 200:
-                # Guardar SVG
-                svg_file = self.output_dir / f"{pictogram_id}.svg"
-                svg_file.write_bytes(svg_response.content)
-                pictogram_data['svg_path'] = str(svg_file)
+            png_response = requests.get(png_url)
+            
+            if png_response.status_code == 200:
+                # Crear directorio si no existe
+                self.output_dir.mkdir(parents=True, exist_ok=True)
                 
-                # Obtener metadata para cada idioma
-                for locale in locales:
-                    try:
-                        meta_url = f"{self.base_url}/pictograms/{pictogram_id}/{locale}"
-                        meta_response = requests.get(meta_url)
-                        metadata = meta_response.json()
-                        
-                        pictogram_data['translations'][locale] = {
-                            'keyword': metadata.get('keyword'),
-                            'meaning': metadata.get('meaning'),
-                            'tags': metadata.get('tags', [])
-                        }
-                        
-                        # Guardar metadata por idioma
-                        metadata_file = self.output_dir / f"{pictogram_id}_{locale}.json"
-                        with metadata_file.open('w') as f:
-                            json.dump({
-                                'source': 'arasaac',
-                                'id': pictogram_id,
-                                'locale': locale,
-                                **pictogram_data['translations'][locale]
-                            }, f)
-                            
-                    except Exception as e:
-                        self.logger.error(f"Error con metadata {locale} para pictograma {pictogram_id}: {str(e)}")
+                # Guardar imagen
+                image_path = self.output_dir / f"{pictogram_id}.png"
+                image_path.write_bytes(png_response.content)
+                print(f"Imagen guardada en: {image_path}")
                 
-                return pictogram_data
+                # Obtener y guardar metadata
+                data = {
+                    'id': pictogram_id,
+                    'source': 'arasaac',
+                    'image_path': str(image_path),
+                    'url': png_url
+                }
+                
+                metadata_path = self.output_dir / f"{pictogram_id}.json"
+                with open(metadata_path, 'w') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                
+                print(f"Pictograma {pictogram_id} descargado exitosamente")
+                return data
+            else:
+                print(f"Error {png_response.status_code} descargando imagen {pictogram_id}")
+                return None
                 
         except Exception as e:
-            self.logger.error(f"Error descargando pictograma {pictogram_id}: {str(e)}")
-            return {}
-            
-    def download_all(self, limit: Optional[int] = None) -> List[Dict]:
-        """Descarga todos los pictogramas disponibles"""
-        all_pictograms = []
-        keywords = self.get_keywords()
-        
-        if limit:
-            keywords = keywords[:limit]
-            
-        for keyword in keywords:
-            try:
-                pictogram = self.download_pictogram(keyword)
-                if pictogram:
-                    all_pictograms.append(pictogram)
-            except Exception as e:
-                self.logger.error(f"Error procesando keyword {keyword}: {str(e)}")
-                continue
-                
-        return all_pictograms
+            print(f"Error procesando pictograma {pictogram_id}: {str(e)}")
+            return None
