@@ -1,1 +1,12 @@
-{}
+{
+    "language_mappings": {
+        "en": {
+            "chair": ["seat", "stool"],
+            "house": ["home", "building"]
+        },
+        "es": {
+            "silla": ["asiento", "banco"],
+            "casa": ["hogar", "edificio"]
+        }
+    }
+}

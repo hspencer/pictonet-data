@@ -1,1 +1,14 @@
-{}
+{
+    "version": "1.0.0",
+    "categories": [
+        "objects",
+        "actions",
+        "emotions",
+        "people",
+        "places"
+    ],
+    "attributes": {
+        "style": ["simple", "detailed"],
+        "complexity": ["low", "medium", "high"]
+    }
+}
